@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MotoGP 3D: Jejak Sang Pahlawan - IPAS Kelas 6</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0f19;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .font-racing {
+            font-family: 'Orbitron', sans-serif;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Arcade Racing Buttons */
+        .arcade-btn {
+            transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
+            touch-action: none;
+        }
+        .arcade-btn:active, .arcade-btn.active-press {
+            transform: translateY(4px) scale(0.95);
+            filter: brightness(1.2);
+        }
+        .btn-gas {
+            background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+            box-shadow: 0 6px 0 #14532d, 0 10px 20px rgba(34, 197, 94, 0.4);
+            border: 2px solid #86efac;
+        }
+        .btn-gas:active, .btn-gas.active-press {
+            box-shadow: 0 2px 0 #14532d, 0 4px 10px rgba(34, 197, 94, 0.6);
+        }
+        .btn-brake {
+            background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+            box-shadow: 0 6px 0 #7f1d1d, 0 10px 20px rgba(239, 68, 68, 0.4);
+            border: 2px solid #fca5a5;
+        }
+        .btn-brake:active, .btn-brake.active-press {
+            box-shadow: 0 2px 0 #7f1d1d, 0 4px 10px rgba(239, 68, 68, 0.6);
+        }
+        .btn-steer {
+            background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+            box-shadow: 0 6px 0 #1e3a8a, 0 10px 20px rgba(59, 130, 246, 0.4);
+            border: 2px solid #93c5fd;
+        }
+        .btn-steer:active, .btn-steer.active-press {
+            box-shadow: 0 2px 0 #1e3a8a, 0 4px 10px rgba(59, 130, 246, 0.6);
+        }
+        /* Glass HUD Panel */
+        .hud-glass {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        /* Pulse animation for low timer */
+        @keyframes pulseDanger {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+        .timer-danger {
+            animation: pulseDanger 0.5s infinite;
+        }
+        /* Lane indicator glow */
+        .lane-active {
+            transform: translateY(-2px);
+            box-shadow: 0 0 16px rgba(250, 204, 21, 0.85);
+            border-color: #facc15 !important;
+        }
+    </style>
+</head>
+<body class="text-white select-none">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- ==================== HUD LAYER ==================== -->
+    <div id="hud-layer" class="fixed inset-0 pointer-events-none z-10 flex flex-col justify-between p-2 sm:p-4">
+
+        <!-- TOP SECTION: Status Bar + Question Panel + Gate Preview -->
+        <div class="w-full max-w-5xl mx-auto flex flex-col gap-1.5 sm:gap-2">
+
+            <!-- Status Row: Lives, Question Counter, Timer, Score -->
+            <div class="flex flex-wrap items-center justify-between gap-2 hud-glass rounded-2xl px-3 py-2 shadow-xl">
+                <!-- Lives (3 Nyawa) -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-300 hidden sm:inline">Nyawa:</span>
+                    <div id="lives-container" class="flex items-center gap-1 text-lg sm:text-xl">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Question Progress Badge -->
+                <div class="flex items-center gap-2 bg-slate-800/90 border border-slate-600/80 px-3 py-1 rounded-xl">
+                    <i class="fa-solid fa-flag-checkered text-amber-400 text-xs sm:text-sm"></i>
+                    <span class="font-racing text-xs sm:text-sm font-bold text-amber-300">
+                        SOAL <span id="q-number">1</span>/20
+                    </span>
+                </div>
+
+                <!-- 20s Countdown Timer -->
+                <div id="timer-badge" class="flex items-center gap-2 bg-slate-900/90 border-2 border-cyan-400 px-3 py-1 rounded-xl">
+                    <i class="fa-solid fa-stopwatch text-cyan-400 text-sm"></i>
+                    <span id="timer-text" class="font-racing text-sm sm:text-base font-extrabold text-cyan-300">20.0s</span>
+                </div>
+
+                <!-- Score & Sound Toggle -->
+                <div class="flex items-center gap-2">
+                    <div class="bg-amber-500/20 border border-amber-400/50 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+                        <i class="fa-solid fa-trophy text-amber-400 text-xs"></i>
+                        <span id="score-text" class="font-racing text-xs sm:text-sm font-bold text-amber-300">0</span>
+                    </div>
+                    <button id="btn-sound" class="pointer-events-auto bg-slate-800 hover:bg-slate-700 border border-slate-600 w-8 h-8 rounded-xl flex items-center justify-center text-slate-200 transition" title="Suara On/Off">
+                        <i id="sound-icon" class="fa-solid fa-volume-high text-xs"></i>
+                    </button>
+                    <button id="btn-hud-home" class="pointer-events-auto bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2.5 h-8 rounded-xl flex items-center justify-center gap-1.5 text-slate-200 transition" title="Kembali ke Beranda">
+                        <i class="fa-solid fa-house text-xs text-amber-400"></i>
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider hidden sm:inline">Beranda</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Question Box (Muncul Satu Persatu di Atas Layar) -->
+            <div class="hud-glass rounded-2xl p-2.5 sm:p-3.5 shadow-2xl border-t-4 border-t-amber-400 transition-all duration-300">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                        IPAS Kelas 6 • Jejak Sang Pahlawan
+                    </span>
+                    <span id="gate-distance-text" class="font-racing text-[11px] sm:text-xs text-emerald-400 font-bold">
+                        JARAK GERBANG: 180m
+                    </span>
+                </div>
+                <p id="question-text" class="text-xs sm:text-base md:text-lg font-extrabold text-white leading-snug text-center py-0.5">
+                    Memuat pertanyaan...
+                </p>
+
+                <!-- 4 Gate Legend Bar (Sinkron dengan 4 Gerbang 3D di Lintasan) -->
+                <div class="grid grid-cols-4 gap-1.5 sm:gap-2 mt-2">
+                    <div id="lane-card-0" class="rounded-xl p-1.5 sm:p-2 bg-red-950/85 border-2 border-red-500/70 transition-all flex flex-col items-center text-center">
+                        <span class="font-racing text-[10px] sm:text-xs font-black px-2 py-0.2 bg-red-600 text-white rounded-md mb-0.5">GERBANG A</span>
+                        <span id="opt-text-0" class="text-[10px] sm:text-xs font-bold text-red-100 leading-tight line-clamp-2">-</span>
+                    </div>
+                    <div id="lane-card-1" class="rounded-xl p-1.5 sm:p-2 bg-blue-950/85 border-2 border-blue-500/70 transition-all flex flex-col items-center text-center">
+                        <span class="font-racing text-[10px] sm:text-xs font-black px-2 py-0.2 bg-blue-600 text-white rounded-md mb-0.5">GERBANG B</span>
+                        <span id="opt-text-1" class="text-[10px] sm:text-xs font-bold text-blue-100 leading-tight line-clamp-2">-</span>
+                    </div>
+                    <div id="lane-card-2" class="rounded-xl p-1.5 sm:p-2 bg-amber-950/85 border-2 border-amber-500/70 transition-all flex flex-col items-center text-center">
+                        <span class="font-racing text-[10px] sm:text-xs font-black px-2 py-0.2 bg-amber-500 text-slate-950 rounded-md mb-0.5">GERBANG C</span>
+                        <span id="opt-text-2" class="text-[10px] sm:text-xs font-bold text-amber-100 leading-tight line-clamp-2">-</span>
+                    </div>
+                    <div id="lane-card-3" class="rounded-xl p-1.5 sm:p-2 bg-emerald-950/85 border-2 border-emerald-500/70 transition-all flex flex-col items-center text-center">
+                        <span class="font-racing text-[10px] sm:text-xs font-black px-2 py-0.2 bg-emerald-600 text-white rounded-md mb-0.5">GERBANG D</span>
+                        <span id="opt-text-3" class="text-[10px] sm:text-xs font-bold text-emerald-100 leading-tight line-clamp-2">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER FEEDBACK POPUP (Benar / Salah / Waktu Habis) -->
+        <div id="feedback-banner" class="hidden self-center my-auto px-6 py-4 rounded-3xl hud-glass border-2 text-center shadow-2xl transform transition-all scale-100 max-w-md">
+            <div id="feedback-icon" class="text-4xl mb-1">🏆</div>
+            <h3 id="feedback-title" class="font-racing text-xl sm:text-2xl font-black uppercase tracking-wide">JAWABAN BENAR!</h3>
+            <p id="feedback-subtitle" class="text-xs sm:text-sm text-slate-200 font-semibold mt-1"></p>
+        </div>
+
+        <!-- BOTTOM SECTION: MotoGP Dashboard & Arrow Controls -->
+        <div class="w-full max-w-5xl mx-auto flex items-end justify-between gap-2 pb-1 sm:pb-2">
+
+            <!-- LEFT CONTROLS: Belok Kiri & Belok Kanan -->
+            <div class="pointer-events-auto flex items-center gap-2.5 sm:gap-4">
+                <button id="btn-left" class="arcade-btn btn-steer w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg" aria-label="Belok Kiri">
+                    <i class="fa-solid fa-arrow-left text-2xl sm:text-3xl"></i>
+                    <span class="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider mt-0.5">KIRI</span>
+                </button>
+                <button id="btn-right" class="arcade-btn btn-steer w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg" aria-label="Belok Kanan">
+                    <i class="fa-solid fa-arrow-right text-2xl sm:text-3xl"></i>
+                    <span class="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider mt-0.5">KANAN</span>
+                </button>
+            </div>
+
+            <!-- CENTER MOTOGP TELEMETRY: Speedometer & Gear -->
+            <div class="hud-glass rounded-2xl px-3 py-2 sm:px-5 sm:py-2.5 flex flex-col items-center border border-slate-600/80 shadow-2xl min-w-[130px] sm:min-w-[180px]">
+                <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5 border border-slate-700">
+                    <div id="rpm-bar" class="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500 transition-all duration-75" style="width: 45%"></div>
+                </div>
+                <div class="flex items-baseline gap-1">
+                    <span id="speed-value" class="font-racing text-2xl sm:text-4xl font-black text-white tracking-tight">120</span>
+                    <span class="font-racing text-[10px] sm:text-xs font-bold text-amber-400">KM/H</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span id="throttle-status" class="text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                        JALUR B
+                    </span>
+                </div>
+            </div>
+
+            <!-- RIGHT CONTROLS: Panah Atas (Gas) & Panah Bawah (Rem) -->
+            <div class="pointer-events-auto flex items-center gap-2.5 sm:gap-4">
+                <button id="btn-down" class="arcade-btn btn-brake w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg" aria-label="Rem / Kurangi Kecepatan">
+                    <i class="fa-solid fa-arrow-down text-2xl sm:text-3xl"></i>
+                    <span class="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider mt-0.5">REM</span>
+                </button>
+                <button id="btn-up" class="arcade-btn btn-gas w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg" aria-label="Gas / Tambah Kecepatan">
+                    <i class="fa-solid fa-arrow-up text-2xl sm:text-3xl"></i>
+                    <span class="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider mt-0.5">GAS</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================== START MODAL ==================== -->
+    <div id="start-modal" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+        <div class="hud-glass max-w-lg w-full rounded-3xl p-6 sm:p-8 border-2 border-amber-400/60 shadow-2xl text-center relative overflow-hidden">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/30 border border-red-400 text-red-300 text-xs font-extrabold uppercase tracking-widest mb-3">
+                <i class="fa-solid fa-motorcycle"></i> EduGame 3D Kurikulum Merdeka
+            </div>
+            <h1 class="font-racing text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-orange-400 to-red-500 tracking-wide">
+                MOTOGP 3D
+            </h1>
+            <h2 class="text-base sm:text-xl font-extrabold text-white mt-1 mb-4">
+                Jejak Sang Pahlawan • IPAS Kelas 6
+            </h2>
+
+            <!-- Rules & Controls Summary -->
+            <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-4 text-left space-y-2.5 text-xs sm:text-sm text-slate-200 mb-6">
+                <div class="flex items-start gap-2.5">
+                    <span class="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-400 text-emerald-300 flex items-center justify-center shrink-0 font-bold">
+                        <i class="fa-solid fa-arrow-up text-xs"></i>
+                    </span>
+                    <p><strong class="text-emerald-300">Panah Atas (GAS):</strong> Menambah kecepatan motor MotoGP menuju gerbang.</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                    <span class="w-6 h-6 rounded-lg bg-red-500/20 border border-red-400 text-red-300 flex items-center justify-center shrink-0 font-bold">
+                        <i class="fa-solid fa-arrow-down text-xs"></i>
+                    </span>
+                    <p><strong class="text-red-300">Panah Bawah (REM):</strong> Mengurangi kecepatan agar lebih mudah membaca dan membidik gerbang.</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                    <span class="w-6 h-6 rounded-lg bg-blue-500/20 border border-blue-400 text-blue-300 flex items-center justify-center shrink-0 font-bold">
+                        <i class="fa-solid fa-arrows-left-right text-xs"></i>
+                    </span>
+                    <p><strong class="text-blue-300">Panah Kiri & Kanan:</strong> Belok berpindah jalur memilih <strong>Gerbang A, B, C, atau D</strong>.</p>
+                </div>
+                <div class="flex items-start gap-2.5">
+                    <span class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-400 text-amber-300 flex items-center justify-center shrink-0 font-bold">
+                        <i class="fa-solid fa-heart text-xs"></i>
+                    </span>
+                    <p><strong class="text-amber-300">20 Soal • 20 Detik • 3 Nyawa:</strong> Masuk ke gerbang jawaban yang benar sebelum waktu 20 detik habis!</p>
+                </div>
+            </div>
+
+            <button id="btn-start-game" class="w-full py-4 rounded-2xl font-racing text-base sm:text-lg font-black uppercase tracking-wider text-slate-950 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 hover:brightness-110 active:scale-95 transition shadow-xl shadow-amber-500/30">
+                <i class="fa-solid fa-flag-checkered mr-2"></i> MULAI BALAPAN!
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== END / GAME OVER MODAL ==================== -->
+    <div id="end-modal" class="hidden fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+        <div class="hud-glass max-w-lg w-full rounded-3xl p-6 sm:p-8 border-2 border-amber-400/60 shadow-2xl text-center">
+            <div id="end-badge" class="w-20 h-20 rounded-full mx-auto flex items-center justify-center text-4xl mb-3 bg-amber-500/20 border-2 border-amber-400 shadow-lg shadow-amber-500/20">
+                🏆
+            </div>
+            <div id="champion-banner" class="hidden mb-2">
+                <span class="inline-block px-4 py-1 rounded-full bg-gradient-to-r from-amber-500/30 via-yellow-400/30 to-amber-500/30 border border-amber-300 text-amber-300 font-racing text-xs sm:text-sm font-black tracking-widest uppercase animate-pulse">
+                    ★ 20 Soal Tuntas • Podium Tertinggi ★
+                </span>
+            </div>
+            <h2 id="end-title" class="font-racing text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-wider drop-shadow">
+                THE CHAMPIONS
+            </h2>
+            <p id="end-message" class="text-sm text-slate-300 mt-1 mb-5">
+                Luar biasa! Kamu telah menaklukkan sirkuit Jejak Sang Pahlawan.
+            </p>
+
+            <div class="grid grid-cols-3 gap-2.5 mb-6">
+                <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-3">
+                    <span class="text-[10px] uppercase text-slate-400 font-bold block">Skor Akhir</span>
+                    <span id="final-score" class="font-racing text-xl sm:text-2xl font-black text-amber-400">0</span>
+                </div>
+                <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-3">
+                    <span class="text-[10px] uppercase text-slate-400 font-bold block">Terjawab Benar</span>
+                    <span id="final-correct" class="font-racing text-xl sm:text-2xl font-black text-emerald-400">0/20</span>
+                </div>
+                <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-3">
+                    <span class="text-[10px] uppercase text-slate-400 font-bold block">Sisa Nyawa</span>
+                    <span id="final-lives" class="font-racing text-xl sm:text-2xl font-black text-red-400">3</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="btn-restart-game" class="flex-1 py-3.5 px-4 rounded-2xl font-racing text-sm sm:text-base font-black uppercase tracking-wider text-slate-950 bg-gradient-to-r from-emerald-400 via-green-300 to-emerald-500 hover:brightness-110 active:scale-95 transition shadow-xl shadow-emerald-500/30">
+                    <i class="fa-solid fa-rotate-right mr-2"></i> MAIN LAGI
+                </button>
+                <button id="btn-home-modal" class="flex-1 py-3.5 px-4 rounded-2xl font-racing text-sm sm:text-base font-black uppercase tracking-wider text-white bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 active:scale-95 transition shadow-xl">
+                    <i class="fa-solid fa-house mr-2 text-amber-400"></i> KEMBALI KE BERANDA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================================
+         * 1. BANK SOAL IPAS KELAS 6: JEJAK SANG PAHLAWAN (KURIKULUM MERDEKA) - 20 SOAL
+         * ========================================================================= */
+        const QUESTION_BANK = [
+            {
+                q: "Perang Diponegoro (1825–1830) dipicu oleh tindakan Belanda yang memasang patok jalan melewati...",
+                options: [
+                    "Makam leluhur Pangeran Diponegoro",
+                    "Pelabuhan dagang Kesultanan",
+                    "Benteng Vredeburg di Yogyakarta",
+                    "Gudang rempah-rempah milik rakyat"
+                ],
+                correct: 0
+            },
+            {
+                q: "Siapakah pahlawan nasional dari Maluku yang memimpin perlawanan merebut Benteng Duurstede di Saparua?",
+                options: [
+                    "Sultan Hasanuddin",
+                    "Kapitan Pattimura",
+                    "Tuanku Imam Bonjol",
+                    "Sisingamangaraja XII"
+                ],
+                correct: 1
+            },
+            {
+                q: "Karena keberaniannya melawan VOC di Makassar, Sultan Hasanuddin mendapat julukan...",
+                options: [
+                    "Pasukan Garuda",
+                    "Macan Asia Timur",
+                    "Ayam Jantan dari Timur",
+                    "Singa dari Tanah Rencong"
+                ],
+                correct: 2
+            },
+            {
+                q: "Perang Padri di Sumatera Barat melawan kolonial Belanda dipimpin oleh tokoh ulama dan pahlawan yaitu...",
+                options: [
+                    "Pangeran Antasari",
+                    "Teuku Umar",
+                    "Sultan Ageng Tirtayasa",
+                    "Tuanku Imam Bonjol"
+                ],
+                correct: 3
+            },
+            {
+                q: "Pahlawan perempuan asal Aceh yang terus memimpin gerilya di hutan melawan Belanda setelah Teuku Umar gugur adalah...",
+                options: [
+                    "Cut Nyak Dien",
+                    "R.A. Kartini",
+                    "Dewi Sartika",
+                    "Martha Christina Tiahahu"
+                ],
+                correct: 0
+            },
+            {
+                q: "Organisasi modern pertama yang menandai kebangkitan nasional Indonesia pada 20 Mei 1908 adalah...",
+                options: [
+                    "Sarekat Islam",
+                    "Budi Utomo",
+                    "Indische Partij",
+                    "Perhimpunan Indonesia"
+                ],
+                correct: 1
+            },
+            {
+                q: "Tokoh pendiri Taman Siswa yang memiliki semboyan 'Tut Wuri Handayani' dan ditetapkan sebagai Bapak Pendidikan Nasional adalah...",
+                options: [
+                    "Dr. Wahidin Sudirohusodo",
+                    "H.O.S. Tjokroaminoto",
+                    "Ki Hajar Dewantara",
+                    "Douwes Dekker"
+                ],
+                correct: 2
+            },
+            {
+                q: "Kongres Pemuda II pada 28 Oktober 1928 menghasilkan ikrar pemersatu bangsa yang dikenal sebagai...",
+                options: [
+                    "Piagam Jakarta",
+                    "Proklamasi Kemerdekaan",
+                    "Dekrit Presiden",
+                    "Sumpah Pemuda"
+                ],
+                correct: 3
+            },
+            {
+                q: "Siapakah komponis pahlawan nasional yang menciptakan dan memperdengarkan lagu 'Indonesia Raya' pada Kongres Pemuda II?",
+                options: [
+                    "W.R. Supratman",
+                    "Ismail Marzuki",
+                    "Kusbini",
+                    "Cornel Simanjuntak"
+                ],
+                correct: 0
+            },
+            {
+                q: "Pahlawan emansipasi perempuan dari Jepara yang pemikirannya dihimpun dalam buku 'Habis Gelap Terbitlah Terang' adalah...",
+                options: [
+                    "Rohana Kudus",
+                    "R.A. Kartini",
+                    "Rasuna Said",
+                    "Fatmawati"
+                ],
+                correct: 1
+            },
+            {
+                q: "Badan yang dibentuk pada masa pendudukan Jepang untuk mempersiapkan kemerdekaan Indonesia (BPUPKI) diketuai oleh...",
+                options: [
+                    "Ir. Soekarno",
+                    "Drs. Mohammad Hatta",
+                    "Dr. K.R.T. Radjiman Wedyodiningrat",
+                    "Mr. Ahmad Soebardjo"
+                ],
+                correct: 2
+            },
+            {
+                q: "Peristiwa dibawanya Soekarno dan Hatta oleh golongan muda pada 16 Agustus 1945 agar segera memproklamasikan kemerdekaan disebut...",
+                options: [
+                    "Peristiwa Bandung Lautan Api",
+                    "Peristiwa Merah Putih",
+                    "Peristiwa Hotel Yamato",
+                    "Peristiwa Rengasdengklok"
+                ],
+                correct: 3
+            },
+            {
+                q: "Rumah Laksamana Tadashi Maeda di Jalan Imam Bonjol No. 1 Jakarta digunakan oleh para tokoh bangsa untuk...",
+                options: [
+                    "Merumuskan naskah Proklamasi Kemerdekaan",
+                    "Menyusun kabinet pemerintahan pertama",
+                    "Mengadakan Kongres Pemuda Indonesia",
+                    "Menandatangani Perjanjian Linggarjati"
+                ],
+                correct: 0
+            },
+            {
+                q: "Siapakah tokoh yang mengetik naskah Proklamasi Kemerdekaan Indonesia setelah ditulis tangan oleh Ir. Soekarno?",
+                options: [
+                    "Sukarni",
+                    "Sayuti Melik",
+                    "B.M. Diah",
+                    "Latief Hendraningrat"
+                ],
+                correct: 1
+            },
+            {
+                q: "Bendera Pusaka Merah Putih yang dikibarkan saat Proklamasi Kemerdekaan 17 Agustus 1945 dijahit oleh...",
+                options: [
+                    "S.K. Trimurti",
+                    "Cut Meutia",
+                    "Ibu Fatmawati",
+                    "Nyai Ahmad Dahlan"
+                ],
+                correct: 2
+            },
+            {
+                q: "Tokoh yang membakar semangat arek-arek Suroboyo melalui pidato radio pada pertempuran 10 November 1945 adalah...",
+                options: [
+                    "Jenderal Sudirman",
+                    "Kolonel Isdiman",
+                    "Mohammad Toha",
+                    "Bung Tomo"
+                ],
+                correct: 3
+            },
+            {
+                q: "Panglima Besar TNI pertama yang tetap memimpin perang gerilya dari atas tandu meskipun sedang sakit paru-paru adalah...",
+                options: [
+                    "Jenderal Sudirman",
+                    "Jenderal Gatot Subroto",
+                    "Jenderal Ahmad Yani",
+                    "Jenderal A.H. Nasution"
+                ],
+                correct: 0
+            },
+            {
+                q: "Peristiwa pengorbanan rakyat dan pejuang membakar kota agar tidak dijadikan markas sekutu di Jawa Barat dikenal dengan...",
+                options: [
+                    "Pertempuran Medan Area",
+                    "Bandung Lautan Api",
+                    "Pertempuran Lima Hari di Semarang",
+                    "Puputan Margarana"
+                ],
+                correct: 1
+            },
+            {
+                q: "Pahlawan asal Bali yang gugur dalam pertempuran Puputan Margarana demi mempertahankan kemerdekaan RI adalah...",
+                options: [
+                    "I Gusti Ketut Jelantik",
+                    "Untung Surapati",
+                    "I Gusti Ngurah Rai",
+                    "Silas Papare"
+                ],
+                correct: 2
+            },
+            {
+                q: "Cara terbaik bagi siswa kelas 6 SD untuk meneladani nilai-nilai perjuangan para pahlawan di masa kini adalah...",
+                options: [
+                    "Hanya menghafal nama pahlawan saat ujian",
+                    "Bermain game sepanjang waktu tanpa belajar",
+                    "Memilih teman berdasarkan suku yang sama",
+                    "Belajar tekun, disiplin, dan menjaga persatuan"
+                ],
+                correct: 3
+            }
+        ];
+
+        /* =========================================================================
+         * 2. WEB AUDIO SYNTHESIZER (Suara Mesin MotoGP & Efek Game)
+         * ========================================================================= */
+        class SoundManager {
+            constructor() {
+                this.ctx = null;
+                this.engineOsc = null;
+                this.engineGain = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (this.ctx) return;
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                this.ctx = new AudioCtx();
+
+                // Continuous MotoGP Engine hum
+                this.engineOsc = this.ctx.createOscillator();
+                this.engineGain = this.ctx.createGain();
+                this.engineOsc.type = 'sawtooth';
+                this.engineOsc.frequency.value = 65;
+                this.engineGain.gain.value = 0.0;
+
+                // Lowpass filter to warm up the sawtooth engine sound
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 320;
+
+                this.engineOsc.connect(filter);
+                filter.connect(this.engineGain);
+                this.engineGain.connect(this.ctx.destination);
+                this.engineOsc.start();
+            }
+
+            updateEngine(speed, isRunning) {
+                if (!this.ctx || !this.engineOsc || !this.engineGain) return;
+                if (!this.enabled || !isRunning) {
+                    this.engineGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.1);
+                    return;
+                }
+                const targetFreq = 55 + (speed / 280) * 145;
+                this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.06);
+                this.engineGain.gain.setTargetAtTime(0.045, this.ctx.currentTime, 0.1);
+            }
+
+            playSfx(type) {
+                if (!this.enabled) return;
+                if (!this.ctx) this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                if (type === 'correct') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now);       // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.09); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.18); // G5
+                    osc.frequency.setValueAtTime(1046.5, now + 0.27); // C6
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                    osc.start(now);
+                    osc.stop(now + 0.5);
+                } else if (type === 'wrong') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.linearRampToValueAtTime(110, now + 0.35);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'win') {
+                    osc.type = 'triangle';
+                    [523, 659, 784, 1046].forEach((f, idx) => {
+                        osc.frequency.setValueAtTime(f, now + idx * 0.12);
+                    });
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+                    osc.start(now);
+                    osc.stop(now + 0.7);
+                }
+            }
+        }
+
+        const sound = new SoundManager();
+
+        /* =========================================================================
+         * 3. KONFIGURASI LINTASAN & STATE PERMAINAN
+         * ========================================================================= */
+        const LANE_X = [-9, -3, 3, 9]; // 4 jalur untuk Gerbang A, B, C, D
+        const LANE_LABELS = ['A', 'B', 'C', 'D'];
+        const LANE_COLORS = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981'];
+
+        const state = {
+            isRunning: false,
+            isTransitioning: false,
+            currentQuestionIndex: 0,
+            lives: 3,
+            score: 0,
+            correctCount: 0,
+            timer: 20.0,
+            maxTimer: 20.0,
+
+            // Fisika Motor MotoGP
+            bikeX: 0,
+            bikeLean: 0,
+            speedKmh: 135,          // Kecepatan awal
+            minSpeedKmh: 35,        // Saat direm penuh (Panah Bawah)
+            cruiseSpeedKmh: 135,    // Kecepatan stabil normal
+            maxSpeedKmh: 275,       // Saat digas penuh (Panah Atas)
+
+            // Posisi Z Gerbang Jawaban
+            gateZ: -195,
+            gateStartZ: -195,
+
+            // Input Tombol Panah
+            keys: {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            },
+
+            // Kamera interaktif (opsional drag)
+            camYawOffset: 0,
+            camPitchOffset: 0
+        };
+
+        /* =========================================================================
+         * 4. INISIALISASI THREE.JS SCENE, KAMERA, DAN MOTOGP 3D
+         * ========================================================================= */
+        let scene, camera, renderer, clock;
+        let bikeGroup, frontWheel, rearWheel, exhaustFlameL, exhaustFlameR;
+        let gatesGroup;
+        let gateSignMeshes = [];
+        let gateArchMeshes = [];
+        let roadMarkings = [];
+        let kerbBlocks = [];
+        let roadsideProps = [];
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.FogExp2(0x0f172a, 0.0042);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 450);
+            camera.position.set(0, 4.8, 10.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // Pencahayaan Sirkuit MotoGP
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.1);
+            dirLight.position.set(25, 50, 30);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Buat Lingkungan Sirkuit, Motor MotoGP, dan Gerbang Jawaban
+            buildEnvironment();
+            buildMotoGPBike();
+            buildAnswerGates();
+
+            window.addEventListener('resize', onWindowResize);
+            setupCameraDrag(renderer.domElement);
+        }
+
+        function buildEnvironment() {
+            // Rumput luar sirkuit
+            const grassGeo = new THREE.PlaneGeometry(500, 600);
+            const grassMat = new THREE.MeshLambertMaterial({ color: 0x064e3b });
+            const grass = new THREE.Mesh(grassGeo, grassMat);
+            grass.rotation.x = -Math.PI / 2;
+            grass.position.set(0, -0.05, -180);
+            scene.add(grass);
+
+            // Aspal Lintasan Balap (lebar 26 unit untuk 4 jalur gerbang)
+            const roadGeo = new THREE.PlaneGeometry(25.5, 600);
+            const roadMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                roughness: 0.85,
+                metalness: 0.1
+            });
+            const road = new THREE.Mesh(roadGeo, roadMat);
+            road.rotation.x = -Math.PI / 2;
+            road.position.set(0, 0, -180);
+            road.receiveShadow = true;
+            scene.add(road);
+
+            // Garis Pembatas 4 Jalur & Kerb Merah-Putih khas MotoGP
+            const dashGeo = new THREE.PlaneGeometry(0.22, 5.5);
+            const dashMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+            const dividerXs = [-6, 0, 6];
+
+            for (let z = 15; z > -320; z -= 12) {
+                dividerXs.forEach(xPos => {
+                    const dash = new THREE.Mesh(dashGeo, dashMat);
+                    dash.rotation.x = -Math.PI / 2;
+                    dash.position.set(xPos, 0.02, z);
+                    scene.add(dash);
+                    roadMarkings.push(dash);
+                });
+            }
+
+            // Kerb Merah-Putih di sisi kiri dan kanan lintasan
+            const kerbGeo = new THREE.BoxGeometry(1.1, 0.16, 4);
+            const redMat = new THREE.MeshLambertMaterial({ color: 0xdc2626 });
+            const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+
+            let toggle = false;
+            for (let z = 20; z > -320; z -= 4) {
+                toggle = !toggle;
+                const mat = toggle ? redMat : whiteMat;
+
+                const leftKerb = new THREE.Mesh(kerbGeo, mat);
+                leftKerb.position.set(-13.3, 0.08, z);
+                scene.add(leftKerb);
+                kerbBlocks.push(leftKerb);
+
+                const rightKerb = new THREE.Mesh(kerbGeo, mat);
+                rightKerb.position.set(13.3, 0.08, z);
+                scene.add(rightKerb);
+                kerbBlocks.push(rightKerb);
+            }
+
+            // Lampu Stadion & Tribun Sirkuit di Kiri-Kanan
+            const poleGeo = new THREE.CylinderGeometry(0.15, 0.2, 12, 8);
+            const poleMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+            const lampHeadGeo = new THREE.BoxGeometry(2.2, 0.5, 0.8);
+            const lampHeadMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+            for (let z = 0; z > -320; z -= 35) {
+                [-18, 18].forEach(sideX => {
+                    const propGroup = new THREE.Group();
+                    const pole = new THREE.Mesh(poleGeo, poleMat);
+                    pole.position.y = 6;
+                    propGroup.add(pole);
+
+                    const head = new THREE.Mesh(lampHeadGeo, lampHeadMat);
+                    head.position.set(sideX < 0 ? 0.8 : -0.8, 12, 0);
+                    propGroup.add(head);
+
+                    propGroup.position.set(sideX, 0, z);
+                    scene.add(propGroup);
+                    roadsideProps.push(propGroup);
+                });
+            }
+        }
+
+        function buildMotoGPBike() {
+            bikeGroup = new THREE.Group();
+
+            // Material Motor MotoGP Merah-Emas-Hitam
+            const fairingRed = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.25, metalness: 0.4 });
+            const accentYellow = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
+            const darkCarbon = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.5, metalness: 0.5 });
+            const chromeMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.2, metalness: 0.85 });
+            const tireMat = new THREE.MeshLambertMaterial({ color: 0x090d16 });
+            const rimMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.8 });
+
+            // Roda Belakang
+            rearWheel = new THREE.Group();
+            const rTire = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.24, 14, 24), tireMat);
+            rTire.rotation.y = Math.PI / 2;
+            const rRim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 16), rimMat);
+            rRim.rotation.y = Math.PI / 2;
+            rearWheel.add(rTire, rRim);
+            rearWheel.position.set(0, 0.84, 1.15);
+            bikeGroup.add(rearWheel);
+
+            // Roda Depan
+            frontWheel = new THREE.Group();
+            const fTire = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.2, 14, 24), tireMat);
+            fTire.rotation.y = Math.PI / 2;
+            const fRim = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.05, 8, 16), rimMat);
+            fRim.rotation.y = Math.PI / 2;
+            frontWheel.add(fTire, fRim);
+            frontWheel.position.set(0, 0.78, -1.25);
+            bikeGroup.add(frontWheel);
+
+            // Bodi Utama & Fairing Aerodinamis MotoGP
+            const mainBody = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.78, 1.95), fairingRed);
+            mainBody.position.set(0, 1.25, -0.05);
+            bikeGroup.add(mainBody);
+
+            // Winglet Aero Kiri & Kanan
+            const wingGeo = new THREE.BoxGeometry(1.35, 0.08, 0.45);
+            const wings = new THREE.Mesh(wingGeo, darkCarbon);
+            wings.position.set(0, 1.38, -0.78);
+            bikeGroup.add(wings);
+
+            // Hidung Depan & Windshield
+            const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.95, 6), fairingRed);
+            nose.rotation.x = -Math.PI / 2;
+            nose.position.set(0, 1.38, -1.28);
+            bikeGroup.add(nose);
+
+            const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.35, 0.65), visorMat);
+            windshield.position.set(0, 1.68, -0.92);
+            windshield.rotation.x = 0.45;
+            bikeGroup.add(windshield);
+
+            // Ekor Belakang & Knalpot Ganda
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.42, 0.95), accentYellow);
+            tail.position.set(0, 1.52, 1.0);
+            tail.rotation.x = 0.22;
+            bikeGroup.add(tail);
+
+            const exhaustGeo = new THREE.CylinderGeometry(0.09, 0.11, 0.85, 10);
+            const exL = new THREE.Mesh(exhaustGeo, chromeMat);
+            exL.rotation.x = Math.PI / 2 + 0.2;
+            exL.position.set(-0.34, 1.18, 1.15);
+            const exR = exL.clone();
+            exR.position.x = 0.34;
+            bikeGroup.add(exL, exR);
+
+            // Efek Api Nitro/Gas Knalpot
+            const flameGeo = new THREE.ConeGeometry(0.11, 0.6, 8);
+            const flameMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+            exhaustFlameL = new THREE.Mesh(flameGeo, flameMat);
+            exhaustFlameL.rotation.x = Math.PI / 2;
+            exhaustFlameL.position.set(-0.34, 1.12, 1.72);
+            exhaustFlameR = exhaustFlameL.clone();
+            exhaustFlameR.position.x = 0.34;
+            bikeGroup.add(exhaustFlameL, exhaustFlameR);
+
+            // Pembalap MotoGP (Rider)
+            const riderTorso = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.72, 0.95), darkCarbon);
+            riderTorso.position.set(0, 1.92, 0.12);
+            riderTorso.rotation.x = -0.68;
+            bikeGroup.add(riderTorso);
+
+            const riderStripe = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.25, 0.65), fairingRed);
+            riderStripe.position.set(0, 1.98, 0.12);
+            riderStripe.rotation.x = -0.68;
+            bikeGroup.add(riderStripe);
+
+            // Helm Pembalap
+            const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 16), accentYellow);
+            helmet.position.set(0, 2.28, -0.35);
+            bikeGroup.add(helmet);
+
+            const helmetVisor = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), visorMat);
+            helmetVisor.position.set(0, 2.30, -0.42);
+            bikeGroup.add(helmetVisor);
+
+            // Lengan Pembalap ke Setang
+            const armGeo = new THREE.CylinderGeometry(0.09, 0.08, 0.75, 8);
+            const armL = new THREE.Mesh(armGeo, fairingRed);
+            armL.position.set(-0.34, 1.78, -0.48);
+            armL.rotation.x = 0.75;
+            const armR = armL.clone();
+            armR.position.x = 0.34;
+            bikeGroup.add(armL, armR);
+
+            bikeGroup.position.set(0, 0, 2.5);
+            scene.add(bikeGroup);
+        }
+
+        /* =========================================================================
+         * 5. MEMBUAT 4 GERBANG JAWABAN 3D (A, B, C, D) DENGAN CANVAS TEXTURE
+         * ========================================================================= */
+        function createGateBannerTexture(letter, answerText, hexColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 320;
+            const ctx = canvas.getContext('2d');
+
+            // Background gelap kontras tinggi
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Header warna gerbang
+            ctx.fillStyle = hexColor;
+            ctx.fillRect(0, 0, canvas.width, 86);
+
+            // Border keliling
+            ctx.strokeStyle = hexColor;
+            ctx.lineWidth = 14;
+            ctx.strokeRect(7, 7, canvas.width - 14, canvas.height - 14);
+
+            // Teks Header "GERBANG A/B/C/D"
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 44px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`GERBANG ${letter}`, canvas.width / 2, 45);
+
+            // Teks Jawaban dengan Word Wrap Otomatis
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 34px "Plus Jakarta Sans", sans-serif';
+            const words = answerText.split(' ');
+            const lines = [];
+            let currentLine = words[0] || '';
+
+            for (let i = 1; i < words.length; i++) {
+                const testLine = currentLine + ' ' + words[i];
+                const metrics = ctx.measureText(testLine);
+                if (metrics.width > canvas.width - 56) {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                } else {
+                    currentLine = testLine;
+                }
+            }
+            lines.push(currentLine);
+
+            const lineHeight = 44;
+            const startY = 195 - ((lines.length - 1) * lineHeight) / 2;
+            lines.forEach((line, idx) => {
+                ctx.fillText(line, canvas.width / 2, startY + idx * lineHeight);
+            });
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function buildAnswerGates() {
+            gatesGroup = new THREE.Group();
+            gateSignMeshes = [];
+            gateArchMeshes = [];
+
+            const pillarGeo = new THREE.BoxGeometry(0.38, 6.8, 0.38);
+            const signGeo = new THREE.PlaneGeometry(5.5, 3.4);
+            const portalGeo = new THREE.PlaneGeometry(5.2, 4.4);
+
+            for (let i = 0; i < 4; i++) {
+                const singleGate = new THREE.Group();
+                const colorHex = LANE_COLORS[i];
+                const pillarMat = new THREE.MeshLambertMaterial({ color: colorHex });
+
+                // Tiang Kiri & Kanan Gerbang
+                const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
+                leftPillar.position.set(-2.65, 3.4, 0);
+                const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
+                rightPillar.position.set(2.65, 3.4, 0);
+                singleGate.add(leftPillar, rightPillar);
+
+                // Portal Cahaya Transparan di Bawah Gerbang (Tempat Motor Masuk)
+                const portalMat = new THREE.MeshBasicMaterial({
+                    color: colorHex,
+                    transparent: true,
+                    opacity: 0.24,
+                    side: THREE.DoubleSide
+                });
+                const portalMesh = new THREE.Mesh(portalGeo, portalMat);
+                portalMesh.position.set(0, 2.2, 0);
+                singleGate.add(portalMesh);
+                gateArchMeshes.push(portalMesh);
+
+                // Papan Banner Jawaban di Atas Gerbang
+                const initTex = createGateBannerTexture(LANE_LABELS[i], 'Memuat...', colorHex);
+                const signMat = new THREE.MeshBasicMaterial({ map: initTex, side: THREE.DoubleSide });
+                const signMesh = new THREE.Mesh(signGeo, signMat);
+                signMesh.position.set(0, 5.9, 0.22);
+                singleGate.add(signMesh);
+                gateSignMeshes.push(signMesh);
+
+                singleGate.position.set(LANE_X[i], 0, 0);
+                gatesGroup.add(singleGate);
+            }
+
+            gatesGroup.position.set(0, 0, state.gateZ);
+            scene.add(gatesGroup);
+        }
+
+        /* =========================================================================
+         * 6. LOGIKA SOAL, TIMER 20 DETIK, DAN PENGECEKAN JAWABAN GERBANG
+         * ========================================================================= */
+        function renderLivesHUD() {
+            const container = document.getElementById('lives-container');
+            container.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const heart = document.createElement('i');
+                if (i < state.lives) {
+                    heart.className = 'fa-solid fa-heart text-red-500 drop-shadow';
+                } else {
+                    heart.className = 'fa-regular fa-heart text-slate-600';
+                }
+                container.appendChild(heart);
+            }
+        }
+
+        function loadCurrentQuestion() {
+            if (state.currentQuestionIndex >= QUESTION_BANK.length) {
+                finishGame(true);
+                return;
+            }
+
+            const qObj = QUESTION_BANK[state.currentQuestionIndex];
+            state.timer = state.maxTimer;
+            state.gateZ = state.gateStartZ;
+            gatesGroup.position.z = state.gateZ;
+            state.isTransitioning = false;
+
+            // Update HUD Soal di Atas Layar
+            document.getElementById('q-number').textContent = state.currentQuestionIndex + 1;
+            document.getElementById('question-text').textContent = qObj.q;
+
+            // Update 4 Gerbang 3D & Kartu Jalur di HUD
+            for (let i = 0; i < 4; i++) {
+                const optText = qObj.options[i];
+                document.getElementById(`opt-text-${i}`).textContent = optText;
+
+                const oldTex = gateSignMeshes[i].material.map;
+                const newTex = createGateBannerTexture(LANE_LABELS[i], optText, LANE_COLORS[i]);
+                gateSignMeshes[i].material.map = newTex;
+                gateSignMeshes[i].material.needsUpdate = true;
+                if (oldTex) oldTex.dispose();
+            }
+        }
+
+        function getClosestLaneIndex(xPos) {
+            let bestIdx = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < LANE_X.length; i++) {
+                const diff = Math.abs(xPos - LANE_X[i]);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestIdx = i;
+                }
+            }
+            return bestIdx;
+        }
+
+        function showFeedbackBanner(isCorrect, title, subtitle) {
+            const banner = document.getElementById('feedback-banner');
+            const icon = document.getElementById('feedback-icon');
+            const titleEl = document.getElementById('feedback-title');
+            const subEl = document.getElementById('feedback-subtitle');
+
+            banner.classList.remove('hidden', 'border-emerald-400', 'border-red-500');
+            if (isCorrect) {
+                banner.classList.add('border-emerald-400');
+                icon.textContent = '🏁';
+                titleEl.className = 'font-racing text-xl sm:text-2xl font-black uppercase tracking-wide text-emerald-400';
+            } else {
+                banner.classList.add('border-red-500');
+                icon.textContent = '💥';
+                titleEl.className = 'font-racing text-xl sm:text-2xl font-black uppercase tracking-wide text-red-400';
+            }
+
+            titleEl.textContent = title;
+            subEl.textContent = subtitle;
+        }
+
+        function hideFeedbackBanner() {
+            document.getElementById('feedback-banner').classList.add('hidden');
+        }
+
+        function handleGatePassOrTimeout(passedLaneIdx, isTimeout = false) {
+            if (state.isTransitioning) return;
+            state.isTransitioning = true;
+
+            const qObj = QUESTION_BANK[state.currentQuestionIndex];
+            const correctLane = qObj.correct;
+            const correctLabel = LANE_LABELS[correctLane];
+            const correctAnswerText = qObj.options[correctLane];
+
+            if (!isTimeout && passedLaneIdx === correctLane) {
+                // Jawaban Benar!
+                const timeBonus = Math.round(state.timer * 5);
+                state.score += 100 + timeBonus;
+                state.correctCount++;
+                document.getElementById('score-text').textContent = state.score;
+                sound.playSfx('correct');
+
+                showFeedbackBanner(
+                    true,
+                    `GERBANG ${LANE_LABELS[passedLaneIdx]} BENAR! (+${100 + timeBonus})`,
+                    `Tepat sekali: ${correctAnswerText}`
+                );
+            } else {
+                // Salah Gerbang atau Waktu 20 Detik Habis -> Nyawa Berkurang 1
+                state.lives = Math.max(0, state.lives - 1);
+                renderLivesHUD();
+                sound.playSfx('wrong');
+
+                const reasonTitle = isTimeout
+                    ? 'WAKTU 20 DETIK HABIS! (-1 NYAWA)'
+                    : `SALAH GERBANG ${LANE_LABELS[passedLaneIdx]}! (-1 NYAWA)`;
+
+                showFeedbackBanner(
+                    false,
+                    reasonTitle,
+                    `Jawaban benar: Gerbang ${correctLabel} (${correctAnswerText})`
+                );
+            }
+
+            setTimeout(() => {
+                hideFeedbackBanner();
+                if (state.lives <= 0) {
+                    finishGame(false);
+                } else {
+                    state.currentQuestionIndex++;
+                    loadCurrentQuestion();
+                }
+            }, 1900);
+        }
+
+        function startGame() {
+            sound.init();
+            state.isRunning = true;
+            state.isTransitioning = false;
+            state.currentQuestionIndex = 0;
+            state.lives = 3;
+            state.score = 0;
+            state.correctCount = 0;
+            state.bikeX = 0;
+            state.speedKmh = state.cruiseSpeedKmh;
+
+            document.getElementById('score-text').textContent = '0';
+            document.getElementById('start-modal').classList.add('hidden');
+            document.getElementById('end-modal').classList.add('hidden');
+
+            renderLivesHUD();
+            loadCurrentQuestion();
+        }
+
+        function goToHome() {
+            state.isRunning = false;
+            state.isTransitioning = false;
+            sound.updateEngine(0, false);
+            hideFeedbackBanner();
+
+            // Reset posisi motor & gerbang di layar latar belakang beranda
+            state.bikeX = 0;
+            state.bikeLean = 0;
+            state.speedKmh = state.cruiseSpeedKmh;
+            bikeGroup.position.x = 0;
+            bikeGroup.rotation.set(0, 0, 0);
+
+            document.getElementById('end-modal').classList.add('hidden');
+            document.getElementById('start-modal').classList.remove('hidden');
+        }
+
+        function finishGame(completedAll) {
+            state.isRunning = false;
+            sound.updateEngine(0, false);
+
+            const modal = document.getElementById('end-modal');
+            const badge = document.getElementById('end-badge');
+            const championBanner = document.getElementById('champion-banner');
+            const title = document.getElementById('end-title');
+            const msg = document.getElementById('end-message');
+
+            document.getElementById('final-score').textContent = state.score;
+            document.getElementById('final-correct').textContent = `${state.correctCount}/20`;
+            document.getElementById('final-lives').textContent = state.lives;
+
+            if (completedAll && state.lives > 0) {
+                sound.playSfx('win');
+                badge.textContent = '🏆';
+                championBanner.classList.remove('hidden');
+                title.textContent = 'THE CHAMPIONS';
+                title.className = 'font-racing text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-wider drop-shadow';
+                msg.textContent = 'Selamat! Kamu berhasil menyelesaikan seluruh 20 soal Jejak Sang Pahlawan dan menjadi Sang Juara Sejati!';
+            } else {
+                badge.textContent = '🏍️';
+                championBanner.classList.add('hidden');
+                title.textContent = 'NYAWA HABIS!';
+                title.className = 'font-racing text-2xl sm:text-3xl font-black text-red-400 tracking-wide';
+                msg.textContent = 'Jangan menyerah! Ayo pacu kembali motor MotoGP-mu dan pelajari Jejak Sang Pahlawan.';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        /* =========================================================================
+         * 7. KONTROL TOMBOL PANAH (KEYBOARD & TOMBOL LAYAR SENTUH/KLIK)
+         * ========================================================================= */
+        function setKeyState(dir, isPressed) {
+            state.keys[dir] = isPressed;
+            const btnMap = {
+                up: 'btn-up',
+                down: 'btn-down',
+                left: 'btn-left',
+                right: 'btn-right'
+            };
+            const btnEl = document.getElementById(btnMap[dir]);
+            if (btnEl) {
+                if (isPressed) btnEl.classList.add('active-press');
+                else btnEl.classList.remove('active-press');
+            }
+        }
+
+        function setupControls() {
+            // Keyboard Arrow Keys
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    setKeyState('up', true);
+                } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                    e.preventDefault();
+                    setKeyState('down', true);
+                } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                    e.preventDefault();
+                    setKeyState('left', true);
+                } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                    e.preventDefault();
+                    setKeyState('right', true);
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') setKeyState('up', false);
+                else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') setKeyState('down', false);
+                else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') setKeyState('left', false);
+                else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') setKeyState('right', false);
+            });
+
+            // On-screen Touch & Mouse Arrow Buttons
+            const bindButton = (id, dir) => {
+                const el = document.getElementById(id);
+                const startPress = (ev) => {
+                    ev.preventDefault();
+                    sound.init();
+                    setKeyState(dir, true);
+                };
+                const endPress = (ev) => {
+                    ev.preventDefault();
+                    setKeyState(dir, false);
+                };
+                el.addEventListener('mousedown', startPress);
+                el.addEventListener('mouseup', endPress);
+                el.addEventListener('mouseleave', endPress);
+                el.addEventListener('touchstart', startPress, { passive: false });
+                el.addEventListener('touchend', endPress, { passive: false });
+                el.addEventListener('touchcancel', endPress, { passive: false });
+            };
+
+            bindButton('btn-up', 'up');
+            bindButton('btn-down', 'down');
+            bindButton('btn-left', 'left');
+            bindButton('btn-right', 'right');
+
+            // Tombol Mulai, Ulangi, Kembali ke Beranda, dan Suara
+            document.getElementById('btn-start-game').addEventListener('click', startGame);
+            document.getElementById('btn-restart-game').addEventListener('click', startGame);
+            document.getElementById('btn-home-modal').addEventListener('click', goToHome);
+            document.getElementById('btn-hud-home').addEventListener('click', goToHome);
+
+            document.getElementById('btn-sound').addEventListener('click', () => {
+                sound.enabled = !sound.enabled;
+                const icon = document.getElementById('sound-icon');
+                icon.className = sound.enabled
+                    ? 'fa-solid fa-volume-high text-xs text-emerald-400'
+                    : 'fa-solid fa-volume-xmark text-xs text-red-400';
+            });
+        }
+
+        function setupCameraDrag(domElement) {
+            let isDragging = false;
+            let prevX = 0;
+            let prevY = 0;
+
+            domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                prevX = e.clientX;
+                prevY = e.clientY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - prevX;
+                const dy = e.clientY - prevY;
+                prevX = e.clientX;
+                prevY = e.clientY;
+                state.camYawOffset = Math.max(-2.5, Math.min(2.5, state.camYawOffset + dx * 0.01));
+                state.camPitchOffset = Math.max(-1.2, Math.min(2.0, state.camPitchOffset + dy * 0.01));
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+                state.camYawOffset = 0;
+                state.camPitchOffset = 0;
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* =========================================================================
+         * 8. GAME LOOP UTAMA (ANIMASI 3D, FISIKA GAS/REM/BELOK, DETEKSI GERBANG)
+         * ========================================================================= */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            if (state.isRunning) {
+                // 1. Kontrol Kecepatan: Panah Atas (Gas) & Panah Bawah (Rem)
+                if (state.keys.up) {
+                    state.speedKmh = Math.min(state.maxSpeedKmh, state.speedKmh + 130 * dt);
+                } else if (state.keys.down) {
+                    state.speedKmh = Math.max(state.minSpeedKmh, state.speedKmh - 155 * dt);
+                } else {
+                    // Kembali halus ke kecepatan jelajah
+                    const diff = state.cruiseSpeedKmh - state.speedKmh;
+                    state.speedKmh += diff * 1.8 * dt;
+                }
+
+                // 2. Kontrol Belok Kiri & Kanan
+                const steerSpeed = 14.5;
+                let targetLean = 0;
+                if (state.keys.left) {
+                    state.bikeX -= steerSpeed * dt;
+                    targetLean = 0.42; // Miring ke kiri ala MotoGP
+                }
+                if (state.keys.right) {
+                    state.bikeX += steerSpeed * dt;
+                    targetLean = -0.42; // Miring ke kanan ala MotoGP
+                }
+                state.bikeX = Math.max(-11.2, Math.min(11.2, state.bikeX));
+                state.bikeLean += (targetLean - state.bikeLean) * 10 * dt;
+
+                // Terapkan posisi & kemiringan pada motor MotoGP
+                bikeGroup.position.x = state.bikeX;
+                bikeGroup.rotation.z = state.bikeLean;
+                bikeGroup.rotation.y = state.bikeLean * 0.22;
+
+                // Efek Api Knalpot saat Digas (Panah Atas)
+                const flameScale = state.keys.up ? 1.35 + Math.random() * 0.4 : 0.45;
+                exhaustFlameL.scale.set(1, flameScale, 1);
+                exhaustFlameR.scale.set(1, flameScale, 1);
+
+                // Putaran Roda Motor
+                const worldSpeed = (state.speedKmh / 135) * 13.5; // unit per detik
+                frontWheel.rotation.x -= worldSpeed * dt * 1.2;
+                rearWheel.rotation.x -= worldSpeed * dt * 1.2;
+
+                // Gerakkan Marka Jalan, Kerb, & Lampu Sirkuit mendekati pemain
+                roadMarkings.forEach(m => {
+                    m.position.z += worldSpeed * dt * 2.2;
+                    if (m.position.z > 18) m.position.z -= 336;
+                });
+                kerbBlocks.forEach(k => {
+                    k.position.z += worldSpeed * dt * 2.2;
+                    if (k.position.z > 20) k.position.z -= 340;
+                });
+                roadsideProps.forEach(p => {
+                    p.position.z += worldSpeed * dt * 2.2;
+                    if (p.position.z > 20) p.position.z -= 350;
+                });
+
+                // 3. Pergerakan Gerbang Jawaban & Countdown Timer 20 Detik
+                if (!state.isTransitioning) {
+                    state.gateZ += worldSpeed * dt;
+                    gatesGroup.position.z = state.gateZ;
+
+                    state.timer = Math.max(0, state.timer - dt);
+                    const timerEl = document.getElementById('timer-text');
+                    const timerBadge = document.getElementById('timer-badge');
+                    timerEl.textContent = `${state.timer.toFixed(1)}s`;
+
+                    if (state.timer <= 5.0) {
+                        timerBadge.classList.add('timer-danger', 'border-red-500');
+                        timerEl.classList.replace('text-cyan-300', 'text-red-400');
+                    } else {
+                        timerBadge.classList.remove('timer-danger', 'border-red-500');
+                        timerEl.classList.replace('text-red-400', 'text-cyan-300');
+                    }
+
+                    // Update jarak ke gerbang
+                    const distMeters = Math.max(0, Math.round(Math.abs(state.gateZ - bikeGroup.position.z)));
+                    document.getElementById('gate-distance-text').textContent = `JARAK GERBANG: ${distMeters}m`;
+
+                    // Cek jika waktu 20 detik habis sebelum melewati gerbang
+                    if (state.timer <= 0) {
+                        handleGatePassOrTimeout(-1, true);
+                    }
+                    // Cek jika motor melewati gerbang (Z >= posisi motor)
+                    else if (state.gateZ >= bikeGroup.position.z) {
+                        const chosenLane = getClosestLaneIndex(state.bikeX);
+                        handleGatePassOrTimeout(chosenLane, false);
+                    }
+                }
+
+                // 4. Update Indikator Jalur Aktif & Speedometer HUD
+                const activeLane = getClosestLaneIndex(state.bikeX);
+                for (let i = 0; i < 4; i++) {
+                    const card = document.getElementById(`lane-card-${i}`);
+                    if (i === activeLane) {
+                        card.classList.add('lane-active');
+                        gateArchMeshes[i].material.opacity = 0.55;
+                    } else {
+                        card.classList.remove('lane-active');
+                        gateArchMeshes[i].material.opacity = 0.2;
+                    }
+                }
+
+                document.getElementById('speed-value').textContent = Math.round(state.speedKmh);
+                const rpmPercent = Math.min(100, Math.max(15, ((state.speedKmh - 20) / 260) * 100));
+                document.getElementById('rpm-bar').style.width = `${rpmPercent}%`;
+
+                const statusEl = document.getElementById('throttle-status');
+                if (state.keys.up) {
+                    statusEl.textContent = `GAS PENUH • JALUR ${LANE_LABELS[activeLane]}`;
+                    statusEl.className = 'text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500';
+                } else if (state.keys.down) {
+                    statusEl.textContent = ` mengerem • JALUR ${LANE_LABELS[activeLane]}`;
+                    statusEl.className = 'text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-500';
+                } else {
+                    statusEl.textContent = `TARGET: GERBANG ${LANE_LABELS[activeLane]}`;
+                    statusEl.className = 'text-[9px] sm:text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700';
+                }
+
+                // Update Suara Mesin
+                sound.updateEngine(state.speedKmh, true);
+
+                // Kamera Dinamis Mengikuti Motor MotoGP
+                const targetCamX = state.bikeX * 0.58 + state.camYawOffset;
+                const targetCamY = 4.6 + state.camPitchOffset;
+                const targetCamZ = 10.2 - (state.speedKmh - 135) * 0.008;
+                camera.position.x += (targetCamX - camera.position.x) * 6 * dt;
+                camera.position.y += (targetCamY - camera.position.y) * 6 * dt;
+                camera.position.z += (targetCamZ - camera.position.z) * 6 * dt;
+                camera.lookAt(state.bikeX * 0.45, 2.1, -28);
+            } else {
+                // Kamera idle sinematik saat di menu awal
+                const t = clock.getElapsedTime();
+                camera.position.x = Math.sin(t * 0.4) * 3.2;
+                camera.position.y = 4.5;
+                camera.position.z = 10.5;
+                camera.lookAt(0, 1.8, -20);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initThreeJS();
+            setupControls();
+            renderLivesHUD();
+            animate();
+        };
+    </script>
+</body>
+</html>
